@@ -1,6 +1,7 @@
 import numpy as np
 import cv2
-from scipy.stats import skew, kurtosis, entropy
+from scipy.stats import skew, kurtosis
+from scipy.stats import entropy
 import glob
 import os
 
@@ -12,30 +13,37 @@ def features_kappa(img):
         img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     
     # Normalize pixel values to range [0, 1]
-    img = img.astype(np.float32) / 255.0
-
+    img = img.astype(np.float32) / 255.0  # Convert to float32 for compatibility with OpenCV
+    
     # Compute Median Filtered Residual (MFR)
     img_median = cv2.medianBlur(img, 3)
     residual = img - img_median
-
+    
     # Sliding window for 3×3 blocks
     win_sz = 3
     stride = 1
     rows, cols = residual.shape
     sko, kuo = [], []
-
     for i in range(0, rows - win_sz + 1, stride):
-        for j in range(0, cols - win_sz + 1, stride):
-            block = residual[i:i + win_sz, j:j + win_sz].flatten()
+      for j in range(0, cols - win_sz + 1, stride):
+        block = residual[i:i + win_sz, j:j + win_sz].flatten()
+        if np.var(block) > 1e-6:  # Skip nearly constant blocks
             sko.append(skew(block))
             kuo.append(kurtosis(block))
+        else:
+            sko.append(0.0)
+            kuo.append(0.0)
 
+    
     # Filter out NaN values
     sko = [val for val in sko if not np.isnan(val)]
     kuo = [val for val in kuo if not np.isnan(val)]
-
+    
+    # Compute Pearson parameter κ
     sko, kuo = np.array(sko), np.array(kuo)
-    kappa = (sko**2) / kuo
+    epsilon = 1e-8
+    kappa = (sko**2) / (kuo + epsilon)
+
     kappa = kappa[~np.isnan(kappa)]  # Remove NaN κ values
 
     # Generate histogram (16 bins, range [0, 1.6])
@@ -55,34 +63,58 @@ def features_kappa(img):
     features = np.concatenate((hist, [mean, variance, skewness, kurt, energy, entropy_val, max_bin]))
     return features
 
-# ========================== MAIN SCRIPT ===========================
+# Path to the dataset directory
+dataset_directory = "/home/mallarapuhemavarshini/Desktop/Mystudies/dip" 
+ # Replace with your actual directory path
 
-# Path to the folder containing original TIF images
-original_images_path = "/home/mallarapuhemavarshini/Desktop/Mystudies/dip/UCID1338"  # <-- Replace if needed
+# Find all .tif files in the directory and subdirectories
+tif_images = glob.glob(os.path.join(dataset_directory, '**', '*.tif'), recursive=True)
 
-# Find all .tif and .TIF files (case-insensitive)
-original_images = glob.glob(os.path.join(original_images_path, '*.tif')) + \
-                  glob.glob(os.path.join(original_images_path, '*.TIF'))
+# Check how many .tif images are found
+print(f"Found {len(tif_images)} TIF images.")
+if len(tif_images) == 0:
+    print("No TIF images found. Check the directory path and extension.")
 
-# Check how many images were found
-print(f"Found {len(original_images)} original TIF images.")
-if len(original_images) == 0:
-    print("No TIF images found. Please check the path.")
-
-# Process each image
-for img_path in sorted(original_images):
+# Iterate through the list of .tif files
+for tif_image_path in tif_images:
     # Load the image
-    img = cv2.imread(img_path)
-
-    # Check if image loaded successfully
+    img = cv2.imread(tif_image_path)
+    
+    # Check if the image was loaded properly
     if img is None:
-        print(f"Failed to load image: {img_path}")
-        continue
+        print(f"Failed to load image: {tif_image_path}")
+    else:
+        print(f"Successfully loaded image: {tif_image_path}")
+        
+        try:
+            # Calculate the features
+            features = features_kappa(img)
+            print(f"Features for {tif_image_path}: {features[:10]}...")  # Print only the first 10 elements
+        except Exception as e:
+            print(f"Error processing {tif_image_path}: {e}")
+if __name__ == "__main__":
+    # Path to the dataset directory
+    dataset_directory = "/home/mallarapuhemavarshini/Desktop/Mystudies/dip" 
 
-    try:
-        # Extract features
-        features = features_kappa(img)
-        print(f"Features for {os.path.basename(img_path)}: {features[:10]}...")  # Display first 10 features
-    except Exception as e:
-        print(f"Error processing {img_path}: {e}")
+    # Find all .tif files in the directory and subdirectories
+    tif_images = glob.glob(os.path.join(dataset_directory, '**', '*.tif'), recursive=True)
+
+    print(f"Found {len(tif_images)} TIF images.")
+    if len(tif_images) == 0:
+        print("No TIF images found. Check the directory path and extension.")
+
+    for tif_image_path in tif_images:
+        img = cv2.imread(tif_image_path)
+        
+        if img is None:
+            print(f"Failed to load image: {tif_image_path}")
+        else:
+            print(f"Successfully loaded image: {tif_image_path}")
+            
+            try:
+                features = features_kappa(img)
+                print(f"Features for {tif_image_path}: {features[:10]}...")
+            except Exception as e:
+                print(f"Error processing {tif_image_path}: {e}")
+
 
