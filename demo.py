@@ -1,14 +1,16 @@
 import os
 import cv2
 import numpy as np
-from features_kappa import features_kappa
+from features_kappa_f import features_kappa
 from sklearn.svm import SVC
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 
+
+
 # Paths for original and filtered images
-original_images_path = 'UCID1338'
-filtered_images_path = 'UCID1338_MedianFiltered'
+original_images_path = 'original'  # Folder with original images
+filtered_images_path = 'filtered'  # Folder with median-filtered images
 
 # Ensure the folders exist
 if not os.path.exists(original_images_path):
@@ -16,44 +18,43 @@ if not os.path.exists(original_images_path):
 if not os.path.exists(filtered_images_path):
     raise FileNotFoundError(f"Filtered images folder not found: {filtered_images_path}")
 
-# Process only the first 20 images (assuming filenames are 1.tif, 2.tif, ..., 20.tif)
-image_indices = list(range(1, 21))  # From 1 to 20
+# Fetch all image file names
+original_images = [f for f in os.listdir(original_images_path) if f.endswith(('.jpg', '.png', '.tif', '.bmp'))]
 
+filtered_images = [f for f in os.listdir(filtered_images_path) if f.endswith(('.jpg', '.png', '.tif', '.bmp'))]
+
+# Ensure there is a 1-to-1 correspondence between original and filtered images
+if len(original_images) != len(filtered_images):
+    raise ValueError("The number of original images does not match the number of filtered images.")
+
+# Feature extraction
 features = []
-labels = []
+labels = []  # 0 for original, 1 for filtered
+c=0;
+# Extract features for original images
+for img_name in original_images:
+    img_path = os.path.join(original_images_path, img_name)
+    img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+    print("good night")
+    features.append(features_kappa(img))
+    print("good morning")
+    c=c+1
+    print(c)
+    labels.append(0)
 
-for idx in image_indices:
-    filename = f"{idx}.tif"
-    orig_path = os.path.join(original_images_path, filename)
-    filt_path = os.path.join(filtered_images_path, filename)
+# Extract features for filtered images
+for img_name in filtered_images:
+    img_path = os.path.join(filtered_images_path, img_name)
+    img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+    
+    features.append(features_kappa(img))
+    
+    labels.append(1)
 
-    if not os.path.exists(orig_path):
-        print(f"Original image not found: {orig_path}")
-        continue
-    if not os.path.exists(filt_path):
-        print(f"Filtered image not found: {filt_path}")
-        continue
-
-    # Load and extract features from original image
-    orig_img = cv2.imread(orig_path, cv2.IMREAD_GRAYSCALE)
-    if orig_img is not None:
-        features.append(features_kappa(orig_img))
-        labels.append(0)
-    else:
-        print(f"Failed to read original image: {orig_path}")
-
-    # Load and extract features from filtered image
-    filt_img = cv2.imread(filt_path, cv2.IMREAD_GRAYSCALE)
-    if filt_img is not None:
-        features.append(features_kappa(filt_img))
-        labels.append(1)
-    else:
-        print(f"Failed to read filtered image: {filt_path}")
-
-# Convert to NumPy arrays
+# Convert features and labels to numpy arrays
 features = np.array(features)
 labels = np.array(labels)
-
+print("Helooo")
 # Train-test split
 X_train, X_test, y_train, y_test = train_test_split(features, labels, test_size=0.5, random_state=42)
 
@@ -64,5 +65,5 @@ svm.fit(X_train, y_train)
 # Evaluate the classifier
 y_pred = svm.predict(X_test)
 accuracy = accuracy_score(y_test, y_pred)
-print(f"Accuracy using 20 images: {accuracy * 100:.2f}%")
+print(f"Accuracy: {accuracy * 100:.2f}%")
 
